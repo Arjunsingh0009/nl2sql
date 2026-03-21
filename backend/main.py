@@ -181,3 +181,10 @@ def sample_questions():
             "Which employee made the most sales?",
         ]
     }
+@app.on_event("startup")
+def startup():
+    init_db()
+    print("✅ Database initialized.")
+    # Add this line:
+    from keep_alive import start_keep_alive
+    start_keep_alive()
