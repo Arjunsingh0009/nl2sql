@@ -1,0 +1,33 @@
+# Node modules (very large - don't upload)
+node_modules/
+frontend/node_modules/
+
+# Python virtual environment
+venv/
+backend/venv/
+
+# Database files
+*.db
+*.sqlite3
+
+# Environment variables (keep secret)
+.env
+backend/.env
+frontend/.env
+
+# Build folders
+build/
+frontend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
