@@ -6,7 +6,11 @@ import re
 from groq import Groq
 from db import get_schema_string
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("GROQ_API_KEY environment variable is not set!")
+
+client = Groq(api_key=api_key)
 
 SYSTEM_PROMPT = """You are an expert SQL query generator. Convert natural language questions to valid SQLite SQL queries.
 
