@@ -39,11 +39,13 @@ SCHEMA_INFO = {
     }
 }
 
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
 
 def init_db():
     """Initialize database with schema and seed data."""
@@ -62,6 +64,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def seed_data(cur):
     """Insert realistic sample data."""
     departments = [
@@ -72,23 +75,32 @@ def seed_data(cur):
         ("Finance", 600000, "Boston"),
         ("Product", 900000, "San Francisco"),
     ]
-    cur.executemany("INSERT INTO departments (name, budget, location) VALUES (?,?,?)", departments)
+    cur.executemany(
+        "INSERT INTO departments (name, budget, location) VALUES (?,?,?)",
+        departments
+    )
 
-    majors = ["Computer Science", "Mathematics", "Physics", "Business", "Psychology", "Biology", "English", "Engineering"]
+    majors = ["Computer Science", "Mathematics", "Physics", "Business",
+              "Psychology", "Biology", "English", "Engineering"]
     student_names = [
-        ("Alice Johnson", "alice@uni.edu"), ("Bob Smith", "bob@uni.edu"), ("Carol White", "carol@uni.edu"),
-        ("David Brown", "david@uni.edu"), ("Emma Davis", "emma@uni.edu"), ("Frank Miller", "frank@uni.edu"),
-        ("Grace Wilson", "grace@uni.edu"), ("Henry Moore", "henry@uni.edu"), ("Isla Taylor", "isla@uni.edu"),
-        ("Jack Anderson", "jack@uni.edu"), ("Karen Thomas", "karen@uni.edu"), ("Liam Jackson", "liam@uni.edu"),
-        ("Mia Harris", "mia@uni.edu"), ("Noah Martin", "noah@uni.edu"), ("Olivia Garcia", "olivia@uni.edu"),
-        ("Paul Martinez", "paul@uni.edu"), ("Quinn Robinson", "quinn@uni.edu"), ("Rachel Clark", "rachel@uni.edu"),
+        ("Alice Johnson", "alice@uni.edu"), ("Bob Smith", "bob@uni.edu"),
+        ("Carol White", "carol@uni.edu"), ("David Brown", "david@uni.edu"),
+        ("Emma Davis", "emma@uni.edu"), ("Frank Miller", "frank@uni.edu"),
+        ("Grace Wilson", "grace@uni.edu"), ("Henry Moore", "henry@uni.edu"),
+        ("Isla Taylor", "isla@uni.edu"), ("Jack Anderson", "jack@uni.edu"),
+        ("Karen Thomas", "karen@uni.edu"), ("Liam Jackson", "liam@uni.edu"),
+        ("Mia Harris", "mia@uni.edu"), ("Noah Martin", "noah@uni.edu"),
+        ("Olivia Garcia", "olivia@uni.edu"), ("Paul Martinez", "paul@uni.edu"),
+        ("Quinn Robinson", "quinn@uni.edu"), ("Rachel Clark", "rachel@uni.edu"),
         ("Sam Rodriguez", "sam@uni.edu"), ("Tina Lewis", "tina@uni.edu"),
     ]
     for name, email in student_names:
         cur.execute(
             "INSERT INTO students (name, email, age, major, gpa, enrollment_year, graduation_year) VALUES (?,?,?,?,?,?,?)",
             (name, email, random.randint(18, 25), random.choice(majors),
-             round(random.uniform(2.5, 4.0), 2), random.choice([2020, 2021, 2022]), random.choice([2024, 2025, 2026]))
+             round(random.uniform(2.5, 4.0), 2),
+             random.choice([2020, 2021, 2022]),
+             random.choice([2024, 2025, 2026]))
         )
 
     courses_data = [
@@ -103,7 +115,10 @@ def seed_data(cur):
         ("Business Management", "BUS101", 3, "Prof. Irving", "Business"),
         ("Marketing Fundamentals", "BUS201", 3, "Prof. Johnson", "Business"),
     ]
-    cur.executemany("INSERT INTO courses (course_name, course_code, credits, instructor, department) VALUES (?,?,?,?,?)", courses_data)
+    cur.executemany(
+        "INSERT INTO courses (course_name, course_code, credits, instructor, department) VALUES (?,?,?,?,?)",
+        courses_data
+    )
 
     grades = ["A", "A-", "B+", "B", "B-", "C+", "C", "D", "F"]
     semesters = ["Fall", "Spring", "Summer"]
@@ -112,13 +127,18 @@ def seed_data(cur):
         for course_id in enrolled:
             cur.execute(
                 "INSERT INTO enrollments (student_id, course_id, grade, semester, year) VALUES (?,?,?,?,?)",
-                (student_id, course_id, random.choice(grades), random.choice(semesters), random.choice([2022, 2023, 2024]))
+                (student_id, course_id, random.choice(grades),
+                 random.choice(semesters), random.choice([2022, 2023, 2024]))
             )
 
-    titles = ["Software Engineer", "Senior Engineer", "Team Lead", "Manager", "Analyst", "Specialist", "Coordinator", "Director"]
-    first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara",
-                   "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen", "Christopher", "Lisa"]
-    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Wilson", "Moore"]
+    titles = ["Software Engineer", "Senior Engineer", "Team Lead", "Manager",
+              "Analyst", "Specialist", "Coordinator", "Director"]
+    first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer",
+                   "Michael", "Linda", "William", "Barbara", "Richard", "Susan",
+                   "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen",
+                   "Christopher", "Lisa"]
+    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones",
+                  "Garcia", "Miller", "Davis", "Wilson", "Moore"]
     for i in range(30):
         fname = random.choice(first_names)
         lname = random.choice(last_names)
@@ -128,15 +148,18 @@ def seed_data(cur):
             "INSERT INTO employees (first_name, last_name, email, department_id, salary, hire_date, job_title, age, gender) VALUES (?,?,?,?,?,?,?,?,?)",
             (fname, lname, f"{fname.lower()}.{lname.lower()}{i}@company.com",
              dept, round(random.uniform(45000, 150000), 2), hire,
-             random.choice(titles), random.randint(22, 60), random.choice(["Male", "Female"]))
+             random.choice(titles), random.randint(22, 60),
+             random.choice(["Male", "Female"]))
         )
 
+    product_names = ["Laptop", "T-Shirt", "Coffee Beans", "Python Book",
+                     "Running Shoes", "Desk Lamp", "Headphones", "Jeans",
+                     "Green Tea", "SQL Guide", "Yoga Mat", "Hand Cream",
+                     "Monitor", "Jacket", "Protein Powder", "React Handbook",
+                     "Tennis Racket", "Candle"]
     categories = ["Electronics", "Clothing", "Food", "Books", "Sports", "Home", "Beauty"]
-    product_names = ["Laptop", "T-Shirt", "Coffee Beans", "Python Book", "Running Shoes", "Desk Lamp",
-                     "Headphones", "Jeans", "Green Tea", "SQL Guide", "Yoga Mat", "Hand Cream",
-                     "Monitor", "Jacket", "Protein Powder", "React Handbook", "Tennis Racket", "Candle"]
     suppliers = ["TechCorp", "FashionHub", "FoodPlus", "BookWorld", "SportZone", "HomeDecor"]
-    for i, pname in enumerate(product_names):
+    for pname in product_names:
         cur.execute(
             "INSERT INTO products (name, category, price, stock_quantity, supplier) VALUES (?,?,?,?,?)",
             (pname, random.choice(categories), round(random.uniform(5, 1500), 2),
@@ -152,23 +175,52 @@ def seed_data(cur):
         sale_date = (base_date + timedelta(days=random.randint(0, 730))).strftime("%Y-%m-%d")
         cur.execute(
             "INSERT INTO sales (product_id, employee_id, quantity, total_amount, sale_date, region) VALUES (?,?,?,?,?,?)",
-            (prod_id, emp_id, qty, round(qty * random.uniform(10, 500), 2), sale_date, random.choice(regions))
+            (prod_id, emp_id, qty, round(qty * random.uniform(10, 500), 2),
+             sale_date, random.choice(regions))
         )
 
 
 def execute_query(sql: str):
-    """Execute a validated SELECT query and return results."""
+    """Execute any SQL query and return results."""
     conn = get_connection()
     try:
         cur = conn.cursor()
         cur.execute(sql)
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description] if cur.description else []
-        return {
-            "columns": columns,
-            "rows": [list(row) for row in rows],
-            "row_count": len(rows)
-        }
+        conn.commit()
+
+        sql_upper = sql.strip().upper()
+
+        # SELECT query — return rows and columns
+        if sql_upper.startswith("SELECT"):
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description] if cur.description else []
+            return {
+                "columns": columns,
+                "rows": [list(row) for row in rows],
+                "row_count": len(rows),
+                "message": f"Query returned {len(rows)} rows."
+            }
+
+        # INSERT, UPDATE, DELETE — return affected rows
+        elif sql_upper.startswith(("INSERT", "UPDATE", "DELETE")):
+            return {
+                "columns": ["Result"],
+                "rows": [[f"✅ Success! {cur.rowcount} row(s) affected."]],
+                "row_count": cur.rowcount,
+                "message": f"{cur.rowcount} row(s) affected."
+            }
+
+        # CREATE, ALTER, DROP, TRUNCATE — return success message
+        else:
+            return {
+                "columns": ["Result"],
+                "rows": [["✅ Query executed successfully!"]],
+                "row_count": 0,
+                "message": "Query executed successfully!"
+            }
+
+    except Exception as e:
+        raise Exception(f"SQL Error: {str(e)}")
     finally:
         conn.close()
 
