@@ -56,7 +56,6 @@ def init_db():
     with open(schema_path) as f:
         cur.executescript(f.read())
 
-    # Seed only if empty
     cur.execute("SELECT COUNT(*) FROM departments")
     if cur.fetchone()[0] == 0:
         seed_data(cur)
@@ -180,49 +179,130 @@ def seed_data(cur):
         )
 
 
-def execute_query(sql: str):
-    """Execute any SQL query and return results."""
+def execute_multiple_queries(sql: str):
+    """Execute multiple SQL statements and return combined results."""
     conn = get_connection()
     try:
-        cur = conn.cursor()
-        cur.execute(sql)
-        conn.commit()
+        # Split statements by semicolon
+        raw_statements = sql.split(";")
+        statements = [s.strip() for s in raw_statements if s.strip()]
 
-        sql_upper = sql.strip().upper()
+        if not statements:
+            raise Exception("No SQL statements found.")
 
-        # SELECT query — return rows and columns
-        if sql_upper.startswith("SELECT"):
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description] if cur.description else []
-            return {
-                "columns": columns,
-                "rows": [list(row) for row in rows],
-                "row_count": len(rows),
-                "message": f"Query returned {len(rows)} rows."
-            }
+        all_results = []
+        last_select_result = None
+        total_affected = 0
 
-        # INSERT, UPDATE, DELETE — return affected rows
-        elif sql_upper.startswith(("INSERT", "UPDATE", "DELETE")):
-            return {
-                "columns": ["Result"],
-                "rows": [[f"✅ Success! {cur.rowcount} row(s) affected."]],
-                "row_count": cur.rowcount,
-                "message": f"{cur.rowcount} row(s) affected."
-            }
+        for i, statement in enumerate(statements):
+            cur = conn.cursor()
+            sql_upper = statement.strip().upper()
 
-        # CREATE, ALTER, DROP, TRUNCATE — return success message
-        else:
-            return {
-                "columns": ["Result"],
-                "rows": [["✅ Query executed successfully!"]],
-                "row_count": 0,
-                "message": "Query executed successfully!"
-            }
+            try:
+                # Handle transaction keywords
+                if sql_upper.startswith("BEGIN"):
+                    conn.execute("BEGIN")
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "✅ Transaction started.",
+                        "rows": 0
+                    })
+
+                elif sql_upper.startswith("COMMIT"):
+                    conn.commit()
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "✅ Transaction committed successfully.",
+                        "rows": 0
+                    })
+
+                elif sql_upper.startswith("ROLLBACK"):
+                    conn.rollback()
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "⚠️ Transaction rolled back.",
+                        "rows": 0
+                    })
+
+                elif sql_upper.startswith("SELECT"):
+                    cur.execute(statement)
+                    rows = cur.fetchall()
+                    columns = [desc[0] for desc in cur.description] if cur.description else []
+                    last_select_result = {
+                        "columns": columns,
+                        "rows": [list(row) for row in rows],
+                        "row_count": len(rows)
+                    }
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": f"✅ Returned {len(rows)} row(s).",
+                        "rows": len(rows)
+                    })
+
+                elif sql_upper.startswith(("INSERT", "UPDATE", "DELETE")):
+                    cur.execute(statement)
+                    conn.commit()
+                    affected = cur.rowcount
+                    total_affected += affected
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": f"✅ {affected} row(s) affected.",
+                        "rows": affected
+                    })
+
+                elif sql_upper.startswith(("CREATE", "ALTER", "DROP",
+                                           "TRUNCATE", "CREATE VIEW",
+                                           "CREATE INDEX")):
+                    cur.execute(statement)
+                    conn.commit()
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "✅ Executed successfully.",
+                        "rows": 0
+                    })
+
+                else:
+                    cur.execute(statement)
+                    conn.commit()
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "✅ Executed successfully.",
+                        "rows": 0
+                    })
+
+            except Exception as e:
+                conn.rollback()
+                all_results.append({
+                    "statement": statement[:60],
+                    "result": f"❌ Error: {str(e)}",
+                    "rows": 0
+                })
+
+        # If there was a SELECT — show its results as main output
+        if last_select_result and len(statements) == 1:
+            return last_select_result
+
+        # For multiple statements — show summary table
+        return {
+            "columns": ["#", "Statement", "Result", "Rows Affected"],
+            "rows": [
+                [i + 1, r["statement"] + "...", r["result"], r["rows"]]
+                for i, r in enumerate(all_results)
+            ],
+            "row_count": len(all_results),
+            "message": f"Executed {len(statements)} statement(s) successfully."
+        }
 
     except Exception as e:
+        conn.rollback()
         raise Exception(f"SQL Error: {str(e)}")
     finally:
         conn.close()
+
+
+# Keep old function for compatibility
+def execute_query(sql: str):
+    return execute_multiple_queries(sql)
 
 
 def get_schema_string():

@@ -12,62 +12,90 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 
-SYSTEM_PROMPT = """You are an expert SQL query generator for SQLite databases. Convert natural language to valid SQL queries.
+SYSTEM_PROMPT = """You are an expert SQLite SQL query generator. Convert natural language to valid SQLite SQL queries.
 
 DATABASE SCHEMA:
 {schema}
 
 RULES:
-1. Output ONLY a single SQL statement — no markdown, no backticks, no explanation.
-2. Support ALL SQL operations: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP.
-3. Use SQLite-compatible syntax.
-4. For CREATE TABLE — always include proper data types and PRIMARY KEY.
-5. For INSERT — always include column names.
-6. For SELECT — add LIMIT 500 unless user asks for all.
-7. Return ONLY the SQL query nothing else.
+1. Output ONLY valid SQL statements — no markdown, no backticks, no explanation, no comments.
+2. Support ALL SQL operations:
+   - DDL: CREATE TABLE, CREATE VIEW, CREATE INDEX, ALTER TABLE, DROP TABLE, DROP VIEW
+   - DML: SELECT, INSERT, UPDATE, DELETE, TRUNCATE
+   - TCL: BEGIN TRANSACTION, COMMIT, ROLLBACK
+   - Aggregations: COUNT, SUM, AVG, MAX, MIN, GROUP BY, HAVING
+   - Joins: INNER JOIN, LEFT JOIN, RIGHT JOIN
+   - Subqueries, DISTINCT, ORDER BY, LIMIT, OFFSET
+3. Use SQLite-compatible syntax ONLY:
+   - Use INTEGER PRIMARY KEY AUTOINCREMENT
+   - Use TEXT for strings
+   - Use REAL for decimals
+   - Use strftime() for date functions
+   - SQLite does not support RIGHT JOIN — use LEFT JOIN instead
+   - SQLite does not support stored procedures
+4. For multiple operations — separate each statement with a semicolon on a new line.
+5. For CREATE TABLE — always include data types and constraints.
+6. For INSERT — always include column names.
+7. For transactions — wrap in BEGIN TRANSACTION and COMMIT.
+8. Return ONLY the SQL — nothing else.
 
 EXAMPLES:
-Q: Show all students with GPA above 3.5
-A: SELECT * FROM students WHERE gpa > 3.5 ORDER BY gpa DESC
 
-Q: Create a new table called projects with id, name, deadline and budget columns
-A: CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, deadline TEXT, budget REAL)
+Q: Create employees table and insert records
+A: CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, salary REAL, department TEXT, email TEXT UNIQUE);
+INSERT INTO employees (name, salary, department, email) VALUES ('Alice', 75000, 'Engineering', 'alice@company.com');
+INSERT INTO employees (name, salary, department, email) VALUES ('Bob', 55000, 'Marketing', 'bob@company.com');
 
-Q: Add a new student named John with GPA 3.8 majoring in Computer Science
-A: INSERT INTO students (name, email, age, major, gpa, enrollment_year, graduation_year) VALUES ('John', 'john@uni.edu', 20, 'Computer Science', 3.8, 2023, 2027)
+Q: Show employees with salary between 30000 and 100000 whose name starts with A sorted by salary
+A: SELECT * FROM employees WHERE salary BETWEEN 30000 AND 100000 AND name LIKE 'A%' ORDER BY salary DESC LIMIT 5
 
-Q: Update salary of employee with id 1 to 90000
-A: UPDATE employees SET salary = 90000 WHERE id = 1
+Q: Join employees with departments and show total and average salary per department where total exceeds 100000
+A: SELECT d.name AS department_name, COUNT(e.id) AS employee_count, SUM(e.salary) AS total_salary, AVG(e.salary) AS avg_salary FROM employees e JOIN departments d ON e.department_id = d.id GROUP BY d.id, d.name HAVING SUM(e.salary) > 100000 ORDER BY total_salary DESC
 
-Q: Delete all students with GPA below 2.0
-A: DELETE FROM students WHERE gpa < 2.0
+Q: Update salary by 10 percent for Engineering department
+A: UPDATE employees SET salary = salary * 1.10 WHERE department = 'Engineering'
 
-Q: Add a new column phone to employees table
-A: ALTER TABLE employees ADD COLUMN phone TEXT
+Q: Create a view for high salary employees
+A: CREATE VIEW IF NOT EXISTS high_salary_employees AS SELECT * FROM employees WHERE salary > 80000
 
-Q: Drop the projects table
-A: DROP TABLE IF EXISTS projects
+Q: Create an index on salary column
+A: CREATE INDEX IF NOT EXISTS idx_salary ON employees(salary)
 
-Q: Count students per major
-A: SELECT major, COUNT(*) AS student_count FROM students GROUP BY major ORDER BY student_count DESC
+Q: Delete employees who were hired before 2015
+A: DELETE FROM employees WHERE hire_date < '2015-01-01'
 
-Q: Which department has the highest average salary?
-A: SELECT d.name, AVG(e.salary) AS avg_salary FROM employees e JOIN departments d ON e.department_id = d.id GROUP BY d.id, d.name ORDER BY avg_salary DESC LIMIT 1
+Q: Truncate employees table
+A: DELETE FROM employees
 
-Q: Top 5 products by total sales revenue
-A: SELECT p.name, SUM(s.total_amount) AS total_revenue FROM sales s JOIN products p ON s.product_id = p.id GROUP BY p.id, p.name ORDER BY total_revenue DESC LIMIT 5
+Q: Drop employees table
+A: DROP TABLE IF EXISTS employees
+
+Q: Use transaction to update and commit
+A: BEGIN TRANSACTION;
+UPDATE employees SET salary = salary * 1.10 WHERE department_id = 1;
+COMMIT
+
+Q: Create table insert data and select it
+A: CREATE TABLE IF NOT EXISTS library (id INTEGER PRIMARY KEY AUTOINCREMENT, book_name TEXT NOT NULL, author TEXT, copies INTEGER DEFAULT 0);
+INSERT INTO library (book_name, author, copies) VALUES ('Python Programming', 'Guido', 5);
+INSERT INTO library (book_name, author, copies) VALUES ('SQL Guide', 'Joe Celko', 3);
+SELECT * FROM library
 """
 
-EXPLANATION_PROMPT = """You are an SQL expert. Given a SQL query, explain it in plain English in 2-3 clear sentences.
-Be concise and focus on WHAT the query does.
-Do NOT include any SQL syntax in your explanation."""
+EXPLANATION_PROMPT = """You are an SQL expert. Given one or more SQL statements, explain what they do together in 3-4 clear sentences.
+Focus on WHAT the query does — what data it creates, retrieves, modifies or deletes.
+Do NOT include SQL syntax in your explanation."""
 
 
 def validate_sql(sql: str) -> tuple[bool, str]:
-    """Validate that the SQL is safe."""
-    sql_clean = sql.strip().rstrip(";").strip()
+    """Validate SQL — supports multiple statements of all types."""
 
-    # Allow all major SQL commands
+    # Split into individual statements
+    statements = [s.strip() for s in sql.split(";") if s.strip()]
+
+    if not statements:
+        return False, "No SQL statements found."
+
     allowed_patterns = [
         r"^\s*SELECT\b",
         r"^\s*INSERT\b",
@@ -77,26 +105,29 @@ def validate_sql(sql: str) -> tuple[bool, str]:
         r"^\s*ALTER\b",
         r"^\s*DROP\b",
         r"^\s*TRUNCATE\b",
+        r"^\s*BEGIN\b",
+        r"^\s*COMMIT\b",
+        r"^\s*ROLLBACK\b",
+        r"^\s*SAVEPOINT\b",
     ]
 
-    is_allowed = any(
-        re.match(pattern, sql_clean, re.IGNORECASE)
-        for pattern in allowed_patterns
-    )
+    for statement in statements:
+        is_allowed = any(
+            re.match(pattern, statement, re.IGNORECASE)
+            for pattern in allowed_patterns
+        )
+        if not is_allowed:
+            return False, f"Invalid SQL command: {statement[:50]}"
 
-    if not is_allowed:
-        return False, "Invalid SQL command."
-
-    # Block dangerous injections only
+    # Block dangerous system-level keywords only
     forbidden = [
         r"\bxp_\w+",
-        r"/\*",
         r"\bATTACH\b",
         r"\bDETACH\b",
         r"\bPRAGMA\b",
     ]
     for pattern in forbidden:
-        if re.search(pattern, sql_clean, re.IGNORECASE):
+        if re.search(pattern, sql, re.IGNORECASE):
             return False, "Forbidden keyword detected."
 
     return True, ""
@@ -114,7 +145,7 @@ def nl_to_sql(natural_language: str) -> dict:
             {"role": "user", "content": natural_language}
         ],
         temperature=0.1,
-        max_tokens=500
+        max_tokens=2000
     )
 
     sql_raw = response.choices[0].message.content.strip()
@@ -122,7 +153,24 @@ def nl_to_sql(natural_language: str) -> dict:
     # Strip markdown code fences if present
     sql_clean = re.sub(r"```(?:sql)?\s*", "", sql_raw, flags=re.IGNORECASE).strip()
     sql_clean = re.sub(r"```", "", sql_clean).strip()
-    sql_clean = sql_clean.rstrip(";").strip()
+
+    # Remove any explanation text before the SQL
+    lines = sql_clean.split("\n")
+    sql_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and any(re.match(p, stripped, re.IGNORECASE) for p in [
+            r"^\s*SELECT\b", r"^\s*INSERT\b", r"^\s*UPDATE\b", r"^\s*DELETE\b",
+            r"^\s*CREATE\b", r"^\s*ALTER\b", r"^\s*DROP\b", r"^\s*TRUNCATE\b",
+            r"^\s*BEGIN\b", r"^\s*COMMIT\b", r"^\s*ROLLBACK\b", r"^\s*WITH\b",
+            r".*\);?$", r".*VALUES.*", r".*WHERE.*", r".*JOIN.*", r".*GROUP.*",
+            r".*ORDER.*", r".*HAVING.*", r".*SET\b.*",
+        ]):
+            sql_lines.append(line)
+        elif sql_lines:
+            sql_lines.append(line)
+
+    sql_clean = "\n".join(sql_lines).strip() if sql_lines else sql_clean
 
     return {"sql": sql_clean, "raw": sql_raw}
 
@@ -133,9 +181,9 @@ def explain_sql(sql: str) -> str:
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": EXPLANATION_PROMPT},
-            {"role": "user", "content": f"Explain this SQL:\n{sql}"}
+            {"role": "user", "content": f"Explain these SQL statements:\n{sql}"}
         ],
         temperature=0.1,
-        max_tokens=200
+        max_tokens=300
     )
     return response.choices[0].message.content.strip()
