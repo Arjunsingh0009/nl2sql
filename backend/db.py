@@ -179,64 +179,11 @@ def seed_data(cur):
         )
 
 
-def get_live_schema():
-    """Read ALL tables dynamically from actual database — including newly created ones."""
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-
-        # Get all tables from database
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        tables = [row[0] for row in cur.fetchall()]
-
-        live_schema = {}
-        for table in tables:
-            # Get columns for each table
-            cur.execute(f"PRAGMA table_info({table})")
-            columns_info = cur.fetchall()
-            columns = [col[1] for col in columns_info]
-
-            # Get foreign keys for each table
-            cur.execute(f"PRAGMA foreign_key_list({table})")
-            fk_info = cur.fetchall()
-            foreign_keys = {}
-            for fk in fk_info:
-                foreign_keys[fk[3]] = f"{fk[2]}.{fk[4]}"
-
-            # Use existing description if available
-            existing = SCHEMA_INFO.get(table, {})
-            description = existing.get("description", f"User created table: {table}")
-
-            live_schema[table] = {
-                "columns": columns,
-                "description": description,
-            }
-            if foreign_keys:
-                live_schema[table]["foreign_keys"] = foreign_keys
-
-        return live_schema
-
-    finally:
-        conn.close()
-
-
-def get_schema_string():
-    """Return schema string using LIVE database tables including new ones."""
-    live_schema = get_live_schema()
-    lines = []
-    for table, info in live_schema.items():
-        cols = ", ".join(info["columns"])
-        lines.append(f"- {table}({cols})  # {info['description']}")
-        if "foreign_keys" in info:
-            for col, ref in info["foreign_keys"].items():
-                lines.append(f"    FK: {table}.{col} -> {ref}")
-    return "\n".join(lines)
-
-
 def execute_multiple_queries(sql: str):
     """Execute multiple SQL statements and return combined results."""
     conn = get_connection()
     try:
+        # Split statements by semicolon
         raw_statements = sql.split(";")
         statements = [s.strip() for s in raw_statements if s.strip()]
 
@@ -252,6 +199,7 @@ def execute_multiple_queries(sql: str):
             sql_upper = statement.strip().upper()
 
             try:
+                # Handle transaction keywords
                 if sql_upper.startswith("BEGIN"):
                     conn.execute("BEGIN")
                     all_results.append({
@@ -302,6 +250,17 @@ def execute_multiple_queries(sql: str):
                         "rows": affected
                     })
 
+                elif sql_upper.startswith(("CREATE", "ALTER", "DROP",
+                                           "TRUNCATE", "CREATE VIEW",
+                                           "CREATE INDEX")):
+                    cur.execute(statement)
+                    conn.commit()
+                    all_results.append({
+                        "statement": statement[:60],
+                        "result": "✅ Executed successfully.",
+                        "rows": 0
+                    })
+
                 else:
                     cur.execute(statement)
                     conn.commit()
@@ -312,17 +271,18 @@ def execute_multiple_queries(sql: str):
                     })
 
             except Exception as e:
+                conn.rollback()
                 all_results.append({
                     "statement": statement[:60],
                     "result": f"❌ Error: {str(e)}",
                     "rows": 0
                 })
 
-        # Single SELECT — show results directly
+        # If there was a SELECT — show its results as main output
         if last_select_result and len(statements) == 1:
             return last_select_result
 
-        # Multiple statements — show summary table
+        # For multiple statements — show summary table
         return {
             "columns": ["#", "Statement", "Result", "Rows Affected"],
             "rows": [
@@ -340,5 +300,18 @@ def execute_multiple_queries(sql: str):
         conn.close()
 
 
+# Keep old function for compatibility
 def execute_query(sql: str):
     return execute_multiple_queries(sql)
+
+
+def get_schema_string():
+    """Return a compact schema string for the LLM prompt."""
+    lines = []
+    for table, info in SCHEMA_INFO.items():
+        cols = ", ".join(info["columns"])
+        lines.append(f"- {table}({cols})  # {info['description']}")
+        if "foreign_keys" in info:
+            for col, ref in info["foreign_keys"].items():
+                lines.append(f"    FK: {table}.{col} -> {ref}")
+    return "\n".join(lines)
