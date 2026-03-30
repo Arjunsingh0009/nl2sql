@@ -14,6 +14,7 @@ from typing import Optional
 from db import init_db, execute_query, get_schema_string, SCHEMA_INFO
 from model import nl_to_sql, explain_sql, validate_sql
 
+
 app = FastAPI(
     title="NL2SQL API",
     description="Convert natural language queries to SQL and execute them.",
@@ -189,4 +190,3 @@ def startup():
     from keep_alive import start_keep_alive
     start_keep_alive()
 
-    
