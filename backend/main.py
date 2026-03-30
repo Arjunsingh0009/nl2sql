@@ -54,10 +54,9 @@ class QueryResponse(BaseModel):
     execution_time_ms: float
 
 
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "NL2SQL API is running 🚀"}
-
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 @app.get("/health")
 def health():
@@ -182,6 +181,7 @@ def sample_questions():
             "Which employee made the most sales?",
         ]
     }
+
 @app.on_event("startup")
 def startup():
     init_db()
