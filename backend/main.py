@@ -13,6 +13,7 @@ from typing import Optional
 
 from db import init_db, execute_query, get_schema_string, SCHEMA_INFO
 from model import nl_to_sql, explain_sql, validate_sql
+from db import init_db, execute_query, execute_multiple_queries, get_schema_string, get_live_schema, SCHEMA_INFO
 
 app = FastAPI(
     title="NL2SQL API",
@@ -188,3 +189,12 @@ def startup():
     # Add this line:
     from keep_alive import start_keep_alive
     start_keep_alive()
+
+@app.get("/schema")
+def get_schema():
+    # Returns LIVE schema including newly created tables
+    live_schema = get_live_schema()
+    return {
+        "tables": live_schema,
+        "schema_string": get_schema_string()
+    }
